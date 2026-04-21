@@ -58,6 +58,26 @@ export class CustomTabCard extends LitElement {
     return document.createElement('custom-tab-card-editor');
   }
 
+  public static getStubConfig() {
+    return {
+      type: 'custom:custom-tab-card',
+      outside_cards: true,
+      cards: [
+        {
+          type: 'picture',
+          image: 'https://demo.home-assistant.io/stub_config/t-shirt-promo.png'
+        },
+        {
+          type: 'picture',
+          image: 'https://demo.home-assistant.io/stub_config/t-shirt-promo.png'
+        }
+      ],
+      tabs: ['Tab 1', 'Tab 2'],
+      tab_hold_actions: [{ action: 'none' }, { action: 'none' }],
+      tab_icons: ['', '']
+    };
+  }
+
   private _startHold(index: number) {
     this._isHolding = false;
     
@@ -475,7 +495,7 @@ export class CustomTabCardEditor extends LitElement {
 (window as any).customCards = (window as any).customCards || [];
 (window as any).customCards.push({
   type: 'custom-tab-card',
-  name: 'Tab Card',
+  name: 'TabCard',
   preview: true,
   description: 'A custom card that renders a vertical stack as tabs.'
 });
