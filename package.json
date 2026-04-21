@@ -1,0 +1,17 @@
+{
+  "name": "tab-card",
+  "version": "1.0.0",
+  "description": "Custom Tab Card for Home Assistant",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "lit": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "typescript": "^5.0.0",
+    "vite": "^5.0.0"
+  }
+}
