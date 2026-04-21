@@ -4,12 +4,6 @@ A custom card for Home Assistant that provides a tabbed interface to easily orga
 
 ![TabCard Screenshot](screenshot.png)
 
-## Features
-
-* 📑 Organize multiple cards into neat tabs to save space on your dashboard.
-* 🎨 Integrates seamlessly with Home Assistant themes.
-* 📱 Fully responsive design for both mobile and desktop screens.
-
 ## Installation
 
 ### Method 1: HACS (Recommended)
@@ -32,7 +26,7 @@ A custom card for Home Assistant that provides a tabbed interface to easily orga
 
 ## Configuration
 
-Here is a basic example of how to configure the TabCard in your Lovelace dashboard:
+You can configure everything with the visual editor but here is also a basic example of how to configure the TabCard in yaml:
 
 ```yaml
 type: custom:tab-card
@@ -48,20 +42,6 @@ tabs:
       - type: weather-forecast
         entity: weather.home
 ```
-
-### Options
-
-| Name | Type | Requirement | Default | Description |
-| ---- | ---- | ----------- | ------- | ----------- |
-| `type` | string | **Required** | | Must be `custom:tab-card`. |
-| `tabs` | list | **Required** | | A list of tab objects to render inside the card. |
-
-#### Tab Object Options
-
-| Name | Type | Requirement | Default | Description |
-| ---- | ---- | ----------- | ------- | ----------- |
-| `title` | string | **Required** | | The text displayed on the tab selector button. |
-| `cards` | list | **Required** | | A list of standard Home Assistant cards to display when this tab is active. |
 
 ## How to build
 
