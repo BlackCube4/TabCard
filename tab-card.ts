@@ -16,7 +16,7 @@ export class CustomTabCard extends LitElement {
   @state() private _pressingTab?: number;
   private _pressingTimer?: ReturnType<typeof setTimeout>;
   
-  @state() private _activeCardHidden: boolean = false;
+  @state() private _activeCardHidden: boolean = true;
 
   public async setConfig(config: any): Promise<void> {
     this._config = config;
@@ -153,7 +153,10 @@ export class CustomTabCard extends LitElement {
       return html`
         <ha-card class="${isOutsideAndVisible ? 'outside-tabs-card' : ''}">${tabsHtml}</ha-card>
         <div id="card-container" class="outside-card-content">
-          ${this._cardElements[activeIndex]}
+          ${this._cardElements.map((card, index) => {
+            if (card) card.style.display = index === activeIndex ? '' : 'none';
+            return card;
+          })}
         </div>
       `;
     }
@@ -162,7 +165,10 @@ export class CustomTabCard extends LitElement {
       <ha-card>
         ${tabsHtml}
         <div id="card-container" class="card-content">
-          ${this._cardElements[activeIndex]}
+          ${this._cardElements.map((card, index) => {
+            if (card) card.style.display = index === activeIndex ? '' : 'none';
+            return card;
+          })}
         </div>
       </ha-card>
     `;
