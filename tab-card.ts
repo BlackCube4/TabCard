@@ -51,6 +51,56 @@ export class CustomTabCard extends LitElement {
           this._activeCardHidden = isHidden;
         }
       }
+
+        // Fix for nested sub-cards inheriting the flat top corners (e.g., vertical-stack)
+        this._cardElements.forEach((card, index) => {
+          const isOutsideConfigured = this._config.tab_outside?.[index];
+          const isOutside = isOutsideConfigured !== undefined ? isOutsideConfigured : (this._config.outside_cards === true);
+
+          const applyFix = (targetEl: any) => {
+            if (!targetEl || !targetEl.shadowRoot) return;
+
+            // If it's a conditional card, dig into its actual rendered children
+            if (targetEl.tagName?.toLowerCase() === 'hui-conditional-card') {
+              const children = targetEl.shadowRoot.children;
+              for (let i = 0; i < children.length; i++) {
+                if (children[i].tagName !== 'STYLE') {
+                  applyFix(children[i]);
+                }
+              }
+              return;
+            }
+
+            let styleEl = targetEl.shadowRoot.querySelector('#tab-card-fix');
+            if (!styleEl) {
+              styleEl = document.createElement('style');
+              styleEl.id = 'tab-card-fix';
+              targetEl.shadowRoot.appendChild(styleEl);
+            }
+            
+            if (isOutside) {
+              styleEl.textContent = `
+                * {
+                  --ha-card-border-radius: var(--tab-radius, 12px);
+                }
+                ha-card {
+                  border-top-left-radius: 0 !important;
+                  border-top-right-radius: 0 !important;
+                }
+                :host(hui-vertical-stack-card) #root > *:first-child {
+                  --ha-card-border-radius: 0 0 var(--tab-radius, 12px) var(--tab-radius, 12px);
+                }
+                :host(hui-horizontal-stack-card) #root > * {
+                  --ha-card-border-radius: 0 0 var(--tab-radius, 12px) var(--tab-radius, 12px);
+                }
+              `;
+            } else {
+              styleEl.textContent = '';
+            }
+          };
+
+          applyFix(card);
+        });
     }, 0);
   }
 
@@ -61,7 +111,6 @@ export class CustomTabCard extends LitElement {
   public static getStubConfig() {
     return {
       type: 'custom:custom-tab-card',
-      outside_cards: true,
       cards: [
         {
           type: 'picture',
@@ -73,6 +122,7 @@ export class CustomTabCard extends LitElement {
         }
       ],
       tabs: ['Tab 1', 'Tab 2'],
+      tab_outside: [true, true],
       tab_hold_actions: [{ action: 'none' }, { action: 'none' }],
       tab_icons: ['', '']
     };
@@ -123,8 +173,11 @@ export class CustomTabCard extends LitElement {
     // Ensure active tab stays in bounds if a card was just deleted
     const activeIndex = Math.min(this._activeTab, Math.max(0, this._cardElements.length - 1));
 
-    const isOutsideAndVisible = this._config.outside_cards && !this._activeCardHidden;
-    const isIsolated = this._config.outside_cards && this._activeCardHidden;
+    const isOutsideConfigured = this._config.tab_outside?.[activeIndex];
+    const isOutside = isOutsideConfigured !== undefined ? isOutsideConfigured : (this._config.outside_cards === true);
+
+    const isOutsideAndVisible = isOutside && !this._activeCardHidden;
+    const isIsolated = isOutside && this._activeCardHidden;
 
     const tabsHtml = html`
       <div class="tabs-header ${isOutsideAndVisible ? 'outside' : ''} ${isIsolated ? 'isolated' : ''}">
@@ -149,7 +202,7 @@ export class CustomTabCard extends LitElement {
       </div>
     `;
 
-    if (this._config.outside_cards) {
+    if (isOutside) {
       return html`
         <ha-card class="${isOutsideAndVisible ? 'outside-tabs-card' : ''}">${tabsHtml}</ha-card>
         <div id="card-container" class="outside-card-content">
@@ -258,6 +311,9 @@ export class CustomTabCard extends LitElement {
     .outside-card-content > * {
       --ha-card-border-radius: 0 0 var(--tab-radius) var(--tab-radius);
     }
+    .outside-card-content > * * {
+      --ha-card-border-radius: var(--tab-radius);
+    }
   `;
 }
 
@@ -307,6 +363,8 @@ export class CustomTabCardEditor extends LitElement {
         const oldCardsForHold = [...(this._config.cards || [])];
         const oldIcons = [...(this._config.tab_icons || [])];
         const oldCardsForIcons = [...(this._config.cards || [])];
+        const oldOutside = [...(this._config.tab_outside || [])];
+        const oldCardsForOutside = [...(this._config.cards || [])];
 
         // Smartly map old tabs to the new cards array. 
         // This handles deletions, additions, and even drag-and-drop rearrangements automatically.
@@ -351,7 +409,20 @@ export class CustomTabCardEditor extends LitElement {
           return '';
         });
 
-        this._dispatchEvent({ ...this._config, cards: updatedCards, tabs: newTabs, tab_hold_actions: newHoldActions, tab_icons: newIcons });
+        const newOutside = updatedCards.map((newCard: any, index: number) => {
+          const oldIndex = oldCardsForOutside.indexOf(newCard);
+          if (oldIndex !== -1) {
+            const outside = oldOutside[oldIndex];
+            oldCardsForOutside[oldIndex] = null; 
+            return outside !== undefined ? outside : (this._config.outside_cards === true);
+          }
+          if (updatedCards.length === (this._config.cards?.length || 0)) {
+            return oldOutside[index] !== undefined ? oldOutside[index] : (this._config.outside_cards === true);
+          }
+          return this._config.outside_cards === true;
+        });
+
+        this._dispatchEvent({ ...this._config, cards: updatedCards, tabs: newTabs, tab_hold_actions: newHoldActions, tab_icons: newIcons, tab_outside: newOutside });
       });
 
       const container = this.shadowRoot?.querySelector('#editor-container');
@@ -406,16 +477,10 @@ export class CustomTabCardEditor extends LitElement {
     const tabs = this._config?.tabs || [];
     const holdActions = this._config?.tab_hold_actions || [];
     const icons = this._config?.tab_icons || [];
+    const outside = this._config?.tab_outside || [];
 
     return html`
       <div class="card-config">
-        <ha-formfield label="Show cards outside of tab card" style="display: block; margin-bottom: 16px;">
-          <ha-switch
-            .checked=${this._config.outside_cards === true}
-            @change=${this._handleOutsideCardsChange}
-          ></ha-switch>
-        </ha-formfield>
-
         <h3>Tab Configuration</h3>
         
         ${cards.length === 0 
@@ -437,6 +502,13 @@ export class CustomTabCardEditor extends LitElement {
                   @value-changed=${this._handleSingleIconChange}
                   style="width: 100%; margin-bottom: 12px; display: block;"
                 ></ha-icon-picker>
+
+                <ha-formfield label="Cards Outside" style="display: block; margin-bottom: 12px;">
+                  <ha-switch
+                    .checked=${outside[index] ?? (this._config.outside_cards === true)}
+                    @change=${(ev: any) => this._handleSingleOutsideChange(ev, index)}
+                  ></ha-switch>
+                </ha-formfield>
 
                 <ha-selector
                   .hass=${this.hass}
@@ -484,8 +556,15 @@ export class CustomTabCardEditor extends LitElement {
     this._dispatchEvent({ ...this._config, tab_hold_actions });
   }
 
-  private _handleOutsideCardsChange(ev: any): void {
-    this._dispatchEvent({ ...this._config, outside_cards: ev.target.checked });
+  private _handleSingleOutsideChange(ev: any, index: number): void {
+    const tab_outside = [...(this._config.tab_outside || [])];
+    if (tab_outside.length === 0 && this._config.cards) {
+      for (let i = 0; i < this._config.cards.length; i++) {
+        tab_outside[i] = this._config.outside_cards === true;
+      }
+    }
+    tab_outside[index] = ev.target.checked;
+    this._dispatchEvent({ ...this._config, tab_outside });
   }
 
   private _dispatchEvent(config: any): void {
