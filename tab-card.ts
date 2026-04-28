@@ -56,50 +56,7 @@ export class CustomTabCard extends LitElement {
         this._cardElements.forEach((card, index) => {
           const isOutsideConfigured = this._config.tab_outside?.[index];
           const isOutside = isOutsideConfigured !== undefined ? isOutsideConfigured : (this._config.outside_cards === true);
-
-          const applyFix = (targetEl: any) => {
-            if (!targetEl || !targetEl.shadowRoot) return;
-
-            // If it's a conditional card, dig into its actual rendered children
-            if (targetEl.tagName?.toLowerCase() === 'hui-conditional-card') {
-              const children = targetEl.shadowRoot.children;
-              for (let i = 0; i < children.length; i++) {
-                if (children[i].tagName !== 'STYLE') {
-                  applyFix(children[i]);
-                }
-              }
-              return;
-            }
-
-            let styleEl = targetEl.shadowRoot.querySelector('#tab-card-fix');
-            if (!styleEl) {
-              styleEl = document.createElement('style');
-              styleEl.id = 'tab-card-fix';
-              targetEl.shadowRoot.appendChild(styleEl);
-            }
-            
-            if (isOutside) {
-              styleEl.textContent = `
-                * {
-                  --ha-card-border-radius: var(--tab-radius, 12px);
-                }
-                ha-card {
-                  border-top-left-radius: 0 !important;
-                  border-top-right-radius: 0 !important;
-                }
-                :host(hui-vertical-stack-card) #root > *:first-child {
-                  --ha-card-border-radius: 0 0 var(--tab-radius, 12px) var(--tab-radius, 12px);
-                }
-                :host(hui-horizontal-stack-card) #root > * {
-                  --ha-card-border-radius: 0 0 var(--tab-radius, 12px) var(--tab-radius, 12px);
-                }
-              `;
-            } else {
-              styleEl.textContent = '';
-            }
-          };
-
-          applyFix(card);
+          injectCornerFix(card, isOutside);
         });
     }, 0);
   }
@@ -584,3 +541,80 @@ export class CustomTabCardEditor extends LitElement {
   preview: true,
   description: 'A custom card that renders a vertical stack as tabs.'
 });
+
+/**
+ * HELPER: Deep Shadow DOM Piercing to flatten top corners of nested cards
+ */
+const injectCornerFix = async (targetEl: any, isOutside: boolean) => {
+  if (!targetEl) return;
+  
+  if (targetEl.updateComplete) {
+    await targetEl.updateComplete;
+  }
+
+  if (targetEl.shadowRoot) {
+    let styleEl = targetEl.shadowRoot.querySelector('#tab-card-fix');
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'tab-card-fix';
+      targetEl.shadowRoot.appendChild(styleEl);
+    }
+    
+    if (isOutside) {
+      styleEl.textContent = `
+        * {
+          --ha-card-border-radius: var(--tab-radius, 12px);
+        }
+        ha-card {
+          border-top-left-radius: 0 !important;
+          border-top-right-radius: 0 !important;
+        }
+        :host(hui-vertical-stack-card) #root > *:first-child {
+          --ha-card-border-radius: 0 0 var(--tab-radius, 12px) var(--tab-radius, 12px);
+        }
+        :host(hui-horizontal-stack-card) #root > * {
+          --ha-card-border-radius: 0 0 var(--tab-radius, 12px) var(--tab-radius, 12px);
+        }
+      `;
+    } else {
+      styleEl.textContent = '';
+    }
+
+    // Recursively find all nested custom elements and fix them too
+    targetEl.shadowRoot.querySelectorAll('*').forEach((child: any) => {
+      if (child.tagName && child.tagName.includes('-') && child.tagName !== 'HA-CARD') {
+        injectCornerFix(child, isOutside);
+      }
+    });
+
+    // Observer for dynamically added elements anywhere in the shadow tree
+    if (!targetEl._tabFixObserver) {
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach(m => {
+          m.addedNodes.forEach((node: any) => {
+            if (node.tagName && node.tagName.includes('-') && node.tagName !== 'HA-CARD') {
+              injectCornerFix(node, isOutside);
+            } else if (node.querySelectorAll) {
+              node.querySelectorAll('*').forEach((child: any) => {
+                if (child.tagName && child.tagName.includes('-') && child.tagName !== 'HA-CARD') {
+                  injectCornerFix(child, isOutside);
+                }
+              });
+            }
+          });
+        });
+      });
+      observer.observe(targetEl.shadowRoot, { childList: true, subtree: true });
+      targetEl._tabFixObserver = observer;
+    }
+  }
+
+  // Check Light DOM as well for elements wrapped without shadow DOM
+  if (targetEl.children) {
+    Array.from(targetEl.children).forEach((child: any) => {
+      if (child.tagName && child.tagName.includes('-') && child.tagName !== 'HA-CARD') {
+        injectCornerFix(child, isOutside);
+      }
+    });
+  }
+};
