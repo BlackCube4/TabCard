@@ -25,11 +25,7 @@ export class CustomTabCard extends LitElement {
   @state() private _activeTab: number = 0;
   @state() private _cardElements: any[] = [];
   
-  // Hold timing (all in milliseconds):
-  //  - press for HOLD_DURATION before the hold action fires
-  //  - only show the fill animation after HOLD_ANIM_DELAY, so a normal click
-  //    (which is shorter) never briefly triggers it
-  // The CSS fill duration is HOLD_DURATION - HOLD_ANIM_DELAY; keep them in sync.
+  // Keep in sync with the CSS fill duration (HOLD_DURATION - HOLD_ANIM_DELAY).
   private static readonly HOLD_DURATION = 500;
   private static readonly HOLD_ANIM_DELAY = 300;
 
@@ -79,15 +75,10 @@ export class CustomTabCard extends LitElement {
       });
     }
 
-    // Track the real rendered height of the active card so the tab collapses
-    // when its content is empty (e.g. hidden conditional card) and expands only
-    // once actual content is shown. Reacts before paint, avoiding the flicker
-    // a setTimeout(0) measurement caused on reload.
+    // Collapses the tab when the active card renders empty content.
     this._ensureResizeObserver();
 
-    // Fix the corners of nested cards. This only depends on the cards and their
-    // outside-config, so we skip it on frequent hass ticks. Cards added later
-    // are handled by the MutationObserver inside injectCornerFix.
+    // Only depends on cards/outside-config, so skip on frequent hass ticks.
     if (changedProps.has('_config') || changedProps.has('_cardElements')) {
       setTimeout(() => {
         this._cardElements.forEach((card, index) => {
@@ -103,10 +94,8 @@ export class CustomTabCard extends LitElement {
 
     this._resizeObserver?.disconnect();
     this._resizeObserver = new ResizeObserver(() => {
-      // Measure the visible card itself, not the container. The container may
-      // carry padding (inside mode), which would otherwise never report 0 for an
-      // empty card. Measuring the child also avoids a feedback loop with the
-      // collapse styling that removes that padding.
+      // Measure the card itself, not the container - the container's padding
+      // would otherwise never report 0 for an empty card.
       const visible = this._cardElements.find((c) => c && c.style.display !== 'none');
       const isHidden = !visible || visible.offsetHeight === 0;
       if (visible) this._cardHidden.set(visible, isHidden);
@@ -126,8 +115,7 @@ export class CustomTabCard extends LitElement {
     this._resizeObserver = undefined;
     this._observedContainer = undefined;
 
-    // Tear down the corner-fix MutationObservers and reset their guards so they
-    // re-attach cleanly if this card is reconnected (common in HA dashboards).
+    // Reset the corner-fix guards so they re-attach if reconnected.
     this._cornerFixedEls.forEach((el) => {
       el._tabFixObserver?.disconnect();
       el._tabFixObserver = undefined;
@@ -163,8 +151,7 @@ export class CustomTabCard extends LitElement {
   private _startHold(index: number) {
     this._isHolding = false;
 
-    // Wait a moment before showing the fill animation, so a quick click doesn't
-    // flash it. A shorter press ends before this timer runs and never starts it.
+    // Delayed so a quick click never flashes the fill animation.
     this._pressingTimer = setTimeout(() => {
       this._pressingTab = index;
     }, CustomTabCard.HOLD_ANIM_DELAY);
@@ -189,11 +176,8 @@ export class CustomTabCard extends LitElement {
 
   private _selectTab(index: number) {
     this._activeTab = index;
-    // Apply the target card's last-known collapse state synchronously so the
-    // switch renders in its final shape in a single frame. Unknown cards default
-    // to collapsed, which avoids the one-frame expanded flash (and the animated
-    // corner overlap it caused) when moving to a collapsed tab. The ResizeObserver
-    // corrects the value afterwards if the card actually has content.
+    // Apply the card's last-known collapse state synchronously to avoid a
+    // one-frame flash; the ResizeObserver corrects it if it was wrong.
     const target = this._cardElements[index];
     this._activeCardHidden = target ? (this._cardHidden.get(target) ?? true) : true;
   }
@@ -324,8 +308,7 @@ export class CustomTabCard extends LitElement {
       justify-content: center; 
       background: var(--secondary-background-color); 
       border-bottom: 1px solid var(--divider-color); 
-      overflow-x: auto; 
-      /* NEW: Match the top corners to the parent card */
+      overflow-x: auto;
       border-top-left-radius: var(--ha-card-border-radius, 12px);
       border-top-right-radius: var(--ha-card-border-radius, 12px);
     }
@@ -344,10 +327,8 @@ export class CustomTabCard extends LitElement {
       border-bottom-left-radius: var(--ha-card-border-radius, 12px);
       border-bottom-right-radius: var(--ha-card-border-radius, 12px);
     }
-    /* ha-card ships with \`transition: all 0.3s\` in its own :host styles. When a
-       reused ha-card toggles the collapsed/expanded classes (outside→outside tab
-       switch), that animates the bottom border-radius and makes the corners
-       slide/overlap. !important is needed to beat ha-card's internal :host rule. */
+    /* ha-card's own transition otherwise animates the border-radius on tab
+       switches, making the corners visibly slide/overlap. */
     ha-card {
       transition: none !important;
     }
@@ -385,8 +366,10 @@ export class CustomTabCard extends LitElement {
       transition: opacity 0.2s ease;
       pointer-events: none;
     }
-    .tab:hover::after {
-      opacity: 0.1;
+    @media (hover: hover) {
+      .tab:hover::after {
+        opacity: 0.1;
+      }
     }
     .tab:focus-visible {
       outline: 2px solid var(--primary-color);
@@ -410,8 +393,7 @@ export class CustomTabCard extends LitElement {
     }
     .tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); background: var(--card-background-color); }
     .card-content { padding: 8px; }
-    /* Empty active card: drop the padding so the ha-card shrinks to the header.
-       The child still reports its true height, so measurement stays reliable. */
+    /* Drop padding for an empty active card so the ha-card shrinks to the header. */
     .card-content.collapsed { padding: 0; }
     .outside-card-content { margin-top: 0; }
     .outside-card-content > * {
@@ -442,10 +424,8 @@ export class CustomTabCardEditor extends LitElement {
   }
 
   /**
-   * For each card in the new list, find its position in the OLD list so its
-   * per-tab settings (name, icon, ...) can travel with it. Returns an array of
-   * old indexes, where -1 means "this card is new / has no old value".
-   * Handles reordering, additions, deletions and in-place edits.
+   * Maps each card in the new list to its old index, so per-tab settings
+   * (name, icon, ...) travel with it. -1 means the card is new.
    */
   private _findOldIndexes(updatedCards: any[]): number[] {
     const oldCards = [...(this._config.cards || [])];
@@ -457,8 +437,7 @@ export class CustomTabCardEditor extends LitElement {
         oldCards[oldIndex] = null; // don't match the same old card twice
         return oldIndex;
       }
-      // Card object not found. If the list length is unchanged it was most
-      // likely just edited in place, so keep whatever sat at this position.
+      // Not found; if length is unchanged it was likely edited in place.
       return sameLength ? i : -1;
     });
   }
@@ -486,9 +465,6 @@ export class CustomTabCardEditor extends LitElement {
         ev.stopPropagation();
         const updatedCards = ev.detail.config.cards || [];
 
-        // Work out, for every card in the new list, where it lived in the old
-        // list (or -1 if it's brand new). Done once here, then reused for every
-        // per-tab setting below so tab names/icons/etc. follow their card around.
         const oldIndexes = this._findOldIndexes(updatedCards);
 
         // Reads the old value that belonged to the card now at position `i`.
@@ -523,8 +499,7 @@ export class CustomTabCardEditor extends LitElement {
           await this._subEditor.updateComplete;
         }
         
-        // Inject a persistent <style> tag. This survives Lit updates and 
-        // instantly hides ha-form even if HA delays rendering it.
+        // Persists across Lit updates, hiding ha-form even if HA delays it.
         const style = document.createElement('style');
         style.textContent = `
           ha-form { display: none !important; }
@@ -637,17 +612,11 @@ export class CustomTabCardEditor extends LitElement {
     }
   `;
 
-  // --- NEW: Handle individual tab name changes ---
   private _handleSingleTabChange(ev: any): void {
     const index = ev.target.index;
     const value = ev.target.value;
-    
-    // Create a copy of the tabs array (or make a new one if it doesn't exist)
     const tabs = [...(this._config.tabs || [])];
-    
-    // Update the specific index
     tabs[index] = value;
-    
     this._dispatchEvent({ ...this._config, tabs });
   }
 
@@ -695,14 +664,12 @@ export class CustomTabCardEditor extends LitElement {
 });
 
 /**
- * HELPER: Deep Shadow DOM Piercing to flatten top corners of nested cards
+ * Pierces nested shadow DOMs to flatten the top corners of nested cards.
  */
 const injectCornerFix = async (targetEl: any, isOutside: boolean, registry?: Set<any>) => {
   if (!targetEl) return;
 
-  // Skip re-processing if nothing changed since the last run. The MutationObserver
-  // keeps newly added children in sync, so a full recursive walk on every hass
-  // update is unnecessary.
+  // Already processed; the MutationObserver below keeps new children in sync.
   if (targetEl._tabFixObserver && targetEl._tabFixOutside === isOutside) return;
 
   if (targetEl.updateComplete) {
@@ -744,8 +711,7 @@ const injectCornerFix = async (targetEl: any, isOutside: boolean, registry?: Set
       }
     });
 
-    // Observer for dynamically added elements anywhere in the shadow tree.
-    // Reads the current _tabFixOutside so it stays correct after isOutside flips.
+    // Catches elements added later; reads the live _tabFixOutside value.
     if (!targetEl._tabFixObserver) {
       const observer = new MutationObserver((mutations) => {
         mutations.forEach(m => {
@@ -777,7 +743,6 @@ const injectCornerFix = async (targetEl: any, isOutside: boolean, registry?: Set
     });
   }
 
-  // Record the state we just applied so the guard above can short-circuit
-  // future calls and the observer can react to isOutside changes.
+  // Lets the guard above short-circuit and the observer track isOutside.
   targetEl._tabFixOutside = isOutside;
 };
