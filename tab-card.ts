@@ -176,8 +176,7 @@ export class CustomTabCard extends LitElement {
 
   private _selectTab(index: number) {
     this._activeTab = index;
-    // Apply the card's last-known collapse state synchronously to avoid a
-    // one-frame flash; the ResizeObserver corrects it if it was wrong.
+    // Avoid a one-frame flash; the ResizeObserver corrects it if wrong.
     const target = this._cardElements[index];
     this._activeCardHidden = target ? (this._cardHidden.get(target) ?? true) : true;
   }
@@ -236,8 +235,7 @@ export class CustomTabCard extends LitElement {
 
     const isOutsideAndVisible = isOutside && !this._activeCardHidden;
     const isIsolated = isOutside && this._activeCardHidden;
-    // Inside mode: collapse the empty content area so the card shrinks to just
-    // the tab header when the active card renders nothing.
+    // Collapse to just the tab header when the active card renders nothing.
     const isInsideCollapsed = !isOutside && this._activeCardHidden;
 
     const tabsHtml = html`
@@ -667,10 +665,17 @@ export class CustomTabCardEditor extends LitElement {
  * Pierces nested shadow DOMs to flatten the top corners of nested cards.
  */
 const injectCornerFix = async (targetEl: any, isOutside: boolean, registry?: Set<any>) => {
-  if (!targetEl) return;
+  if (!targetEl || !targetEl.tagName) return;
 
   // Already processed; the MutationObserver below keeps new children in sync.
   if (targetEl._tabFixObserver && targetEl._tabFixOutside === isOutside) return;
+
+  // HA lazy-loads card types; wait for and force the upgrade instead of
+  // silently skipping not-yet-defined elements.
+  if (targetEl.tagName.includes('-') && !targetEl.shadowRoot) {
+    await customElements.whenDefined(targetEl.tagName.toLowerCase());
+    customElements.upgrade(targetEl);
+  }
 
   if (targetEl.updateComplete) {
     await targetEl.updateComplete;
