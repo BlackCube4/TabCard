@@ -148,6 +148,61 @@ export class CustomTabCard extends LitElement {
     };
   }
 
+  /**
+   * Forward the active child card's Sections-grid sizing to Home Assistant.
+   *
+   * Without this, the wrapper can be assigned the default one-row height even
+   * when the child card (for example apexcharts-card) requests more rows. The
+   * extra row accounts for the tab header.
+   */
+  public getGridOptions(): any {
+    const activeIndex = Math.min(this._activeTab, Math.max(0, this._cardElements.length - 1));
+    const activeCard = this._cardElements[activeIndex];
+
+    let childOptions: any = {};
+    if (activeCard && typeof activeCard.getGridOptions === 'function') {
+      try {
+        childOptions = activeCard.getGridOptions() || {};
+      } catch {
+        childOptions = {};
+      }
+    }
+
+    const options = { ...childOptions };
+
+    if (typeof options.rows === 'number') options.rows += 1;
+    if (typeof options.min_rows === 'number') options.min_rows += 1;
+    if (typeof options.max_rows === 'number') options.max_rows += 1;
+
+    return {
+      columns: options.columns ?? 'full',
+      min_columns: options.min_columns ?? 3,
+      ...options
+    };
+  }
+
+  /**
+   * Forward legacy/Masonry card sizing as well. This is separate from
+   * getGridOptions(), which is used by Sections views.
+   */
+  public async getCardSize(): Promise<number> {
+    const activeIndex = Math.min(this._activeTab, Math.max(0, this._cardElements.length - 1));
+    const activeCard = this._cardElements[activeIndex];
+
+    if (!activeCard) return 1;
+
+    try {
+      await customElements.whenDefined(activeCard.localName);
+      const childSize = typeof activeCard.getCardSize === 'function'
+        ? await activeCard.getCardSize()
+        : 1;
+
+      return Number(childSize || 1) + 1;
+    } catch {
+      return 2;
+    }
+  }
+
   private _startHold(index: number) {
     this._isHolding = false;
 
@@ -299,6 +354,23 @@ export class CustomTabCard extends LitElement {
   static styles = css`
     :host {
       --tab-radius: var(--ha-card-border-radius, 12px);
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
+    }
+
+    :host > ha-card {
+      width: 100%;
+    }
+
+    /* When the child is inside the same ha-card, let its container consume
+       the remaining height below the tab strip. */
+    :host > ha-card:not(.outside-tabs-card) {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      min-height: 0;
     }
 
     .tabs-header { 
@@ -390,11 +462,32 @@ export class CustomTabCard extends LitElement {
       transition: width 0.2s linear; /* HOLD_DURATION (500ms) - HOLD_ANIM_DELAY (300ms) */
     }
     .tab.active { color: var(--primary-color); border-bottom-color: var(--primary-color); background: var(--card-background-color); }
-    .card-content { padding: 8px; }
+    .card-content {
+      padding: 8px;
+      flex: 1 1 auto;
+      min-height: 0;
+      box-sizing: border-box;
+    }
+
     /* Drop padding for an empty active card so the ha-card shrinks to the header. */
     .card-content.collapsed { padding: 0; }
-    .outside-card-content { margin-top: 0; }
+
+    .card-content > * {
+      display: block;
+      height: 100%;
+      min-height: 0;
+    }
+
+    .outside-card-content {
+      margin-top: 0;
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+
     .outside-card-content > * {
+      display: block;
+      height: 100%;
+      min-height: 0;
       --ha-card-border-radius: 0 0 var(--tab-radius) var(--tab-radius);
     }
     .outside-card-content > * * {
@@ -547,13 +640,20 @@ export class CustomTabCardEditor extends LitElement {
           ? html`<p class="hint">Add some cards below to configure their tab names.</p>`
           : cards.map((_: any, index: number) => html`
               <div class="tab-block">
-                <ha-textfield
-                  class="field"
-                  label="Name for Tab ${index + 1}"
-                  .value=${tabs[index] || `Tab ${index + 1}`}
-                  .index=${index}
-                  @input=${this._handleSingleTabChange}
-                ></ha-textfield>
+                <!-- ha-textfield currently collapses to 0px in this nested
+                     Lovelace editor, while ha-selector reserves an empty hint
+                     row. A native input avoids both frontend-specific layout
+                     issues while retaining Home Assistant theme variables. -->
+                <label class="tab-title-field">
+                  <span class="tab-title-label">Tab ${index + 1} title</span>
+                  <input
+                    type="text"
+                    .value=${tabs[index] || `Tab ${index + 1}`}
+                    .index=${index}
+                    @input=${this._handleSingleTabChange}
+                    @change=${this._handleSingleTabChange}
+                  >
+                </label>
 
                 <ha-icon-picker
                   class="field"
@@ -591,13 +691,54 @@ export class CustomTabCardEditor extends LitElement {
   static styles = css`
     h3 { margin-top: 0; }
     .hint { color: var(--secondary-text-color); }
+
+    .tab-title-field {
+      display: block;
+      position: relative;
+      width: 100%;
+      margin-bottom: 12px;
+      padding: 18px 14px 7px;
+      box-sizing: border-box;
+      background: var(--mdc-text-field-fill-color, rgba(255, 255, 255, 0.08));
+      border-bottom: 1px solid var(--secondary-text-color);
+      border-radius: 4px 4px 0 0;
+    }
+
+    .tab-title-label {
+      position: absolute;
+      top: 5px;
+      left: 14px;
+      font-size: 11px;
+      line-height: 1;
+      color: var(--secondary-text-color);
+      pointer-events: none;
+    }
+
+    .tab-title-field input {
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      outline: 0;
+      box-sizing: border-box;
+      background: transparent;
+      color: var(--primary-text-color);
+      font: inherit;
+      line-height: 24px;
+    }
+
+    .tab-title-field:focus-within {
+      border-bottom: 2px solid var(--primary-color);
+      padding-bottom: 6px;
+    }
+
     .tab-block {
       border: 1px solid var(--divider-color);
       border-radius: 8px;
       padding: 12px;
       margin-bottom: 12px;
     }
-    /* Shared spacing for the text field, icon picker and "Cards Outside" row. */
+    /* Shared spacing for the icon picker and "Cards Outside" row. */
     .field {
       display: block;
       width: 100%;
