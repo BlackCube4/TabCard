@@ -11,7 +11,7 @@ A custom card for Home Assistant that provides a tabbed interface to easily orga
 1. Open [HACS](https://hacs.xyz/) in your Home Assistant instance.
 2. Go to the **Frontend** section.
 3. Click the 3 dots in the top right corner and select **Custom repositories**.
-4. Add the URL of this repository and select **Lovelace** as the category.
+4. Add the URL of this repository (https://github.com/BlackCube4/TabCard) and select **Dashboard** as the category.
 5. Click **Install** on the new TabCard repository.
 6. Reload your browser cache.
 
