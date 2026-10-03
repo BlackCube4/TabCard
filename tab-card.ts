@@ -567,7 +567,7 @@ export class CustomTabCardEditor extends LitElement {
         const oldOutside = this._config.tab_outside || [];
         const outsideDefault = this._config.outside_cards === true;
 
-        const newTabs = updatedCards.map((_: any, i: number) => oldValue(oldTabs, i) || `Tab ${i + 1}`);
+        const newTabs = updatedCards.map((_: any, i: number) => oldValue(oldTabs, i) ?? `Tab ${i + 1}`);
         const newHoldActions = updatedCards.map((_: any, i: number) => oldValue(oldHoldActions, i) || { action: 'none' });
         const newIcons = updatedCards.map((_: any, i: number) => oldValue(oldIcons, i) || '');
         const newOutside = updatedCards.map((_: any, i: number) => {
@@ -648,7 +648,7 @@ export class CustomTabCardEditor extends LitElement {
                   <span class="tab-title-label">Tab ${index + 1} title</span>
                   <input
                     type="text"
-                    .value=${tabs[index] || `Tab ${index + 1}`}
+                    .value=${tabs[index] ?? `Tab ${index + 1}`}
                     .index=${index}
                     @input=${this._handleSingleTabChange}
                     @change=${this._handleSingleTabChange}
